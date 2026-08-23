@@ -12,6 +12,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup .NET 9 (NativeAOT 需要)
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
       - name: 一键构建扩展 Yae (拉取 + 补丁 + AOT 发布)
         run: powershell -ExecutionPolicy Bypass -File build.ps1 -YaeDir "build\Yae"
 

@@ -47,9 +47,22 @@ if (-not (Test-Cmd dotnet)) {
     }
 }
 # VS2022 Build Tools (NativeAOT 需要 MSVC cl.exe/link.exe)
+# 用 vswhere 动态定位 MSVC, 兼容 BuildTools / Enterprise / Community (CI 镜像为 Enterprise)
 $vsInstaller = "C:\Program Files (x86)\Microsoft Visual Studio\Installer"
-$vsMsDev = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC"
-$hasVs = (Test-Path "$vsInstaller\vswhere.exe") -and (Test-Path $vsMsDev)
+$vswhere = "$vsInstaller\vswhere.exe"
+$msvcPath = ""
+if (Test-Path $vswhere) {
+    $vsRoot = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>$null
+    if ($vsRoot) {
+        $cand = Join-Path $vsRoot "VC\Tools\MSVC"
+        # MSVC 目录存在且含至少一个版本子目录 (如 14.43.xxxxx\bin\Hostx64\x64\cl.exe)
+        $verDir = Get-ChildItem $cand -Directory -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($verDir -and (Test-Path "$($verDir.FullName)\bin\Hostx64\x64\cl.exe")) {
+            $msvcPath = $verDir.FullName
+        }
+    }
+}
+$hasVs = ($msvcPath -ne "")
 if (-not $hasVs) {
     $vsCmd = 'winget install Microsoft.VisualStudio.2022.BuildTools --override "--quiet --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended" --accept-source-agreements --accept-package-agreements'
     if ($InstallDeps) {
@@ -66,9 +79,9 @@ if (-not $hasVs) {
     }
 }
 # vswhere 加入 PATH (NativeAOT 定位 MSVC)
-if (Test-Path "$vsInstaller\vswhere.exe") {
+if (Test-Path $vswhere) {
     $env:PATH = "$vsInstaller;$env:PATH"
-    Write-Host "[build] 依赖就绪 (git/dotnet/MSVC)" -ForegroundColor DarkGray
+    Write-Host "[build] 依赖就绪 (git/dotnet/MSVC: $msvcPath)" -ForegroundColor DarkGray
 }
 
 # ---------- 1) 拉取 / 定位 Yae ----------
