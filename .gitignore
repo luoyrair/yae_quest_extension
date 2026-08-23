@@ -1,0 +1,26 @@
+# IDE
+.idea
+
+# Yae 工作克隆与构建产物
+Yae/
+publish_quest/
+publish_lib/
+
+# 导出数据 (含账号进度, 勿提交)
+full_sync_*.json
+uigf_quest_record_v1_*.json
+packet_dump_*.bin
+quests_*.json
+quests_*.csv
+quests_*.txt
+achievement_data
+store_data.json
+
+# .NET
+bin/
+obj/
+*.user
+
+# 系统
+Thumbs.db
+.DS_Store

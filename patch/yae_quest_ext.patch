@@ -1,0 +1,174 @@
+diff --git a/YaeAchievement/src/GlobalVars.cs b/YaeAchievement/src/GlobalVars.cs
+index 94ad687..3688a2b 100644
+--- a/YaeAchievement/src/GlobalVars.cs
++++ b/YaeAchievement/src/GlobalVars.cs
+@@ -16,7 +16,10 @@ public static class GlobalVars {
+     private static readonly string CommonData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+     public static readonly string DataPath = Path.Combine(CommonData, "Yae");
+     public static readonly string CachePath = Path.Combine(DataPath, "cache");
+-    public static readonly string LibFilePath = Path.Combine(DataPath, "YaeAchievement.dll");
++    // 优先使用 exe 同目录的本地 Lib (含全量包捕获改动), 否则用官方下载的
++    public static readonly string LibFilePath = File.Exists(Path.Combine(AppPath, "YaeAchievement.dll"))
++        ? Path.Combine(AppPath, "YaeAchievement.dll")
++        : Path.Combine(DataPath, "YaeAchievement.dll");
+ 
+     public const uint   AppVersionCode = 243;
+     public const string AppVersionName = "5.7.3";
+diff --git a/YaeAchievement/src/Program.cs b/YaeAchievement/src/Program.cs
+index 124444d..ce98026 100644
+--- a/YaeAchievement/src/Program.cs
++++ b/YaeAchievement/src/Program.cs
+@@ -45,32 +45,58 @@ public static async Task Main(string[] args) {
+             Environment.Exit(-1);
+         }
+ 
+-        await CheckUpdate(ToBooleanOrDefault(args.ElementAtOrDefault(2)));
++        // --full-sync: 额外导出 full_sync_*.json (默认只输出 UIGF) — 需在 --export-dump 处理前设置
++        FullSyncExporter.EmitFullSync = args.Contains("--full-sync", StringComparer.OrdinalIgnoreCase);
+ 
+-        AppConfig.Load(args.ElementAtOrDefault(0) ?? "auto");
+-        Export.ExportTo = ToIntOrDefault(args.ElementAtOrDefault(1), 114514);
+-
+-        AchievementAllDataNotify? data = null;
+-        try {
+-            if (CacheFile.TryRead("achievement_data", out var cache)) {
+-                data = AchievementAllDataNotify.ParseFrom(cache.Content.ToByteArray());
++        // --export-dump <path>: 不启动游戏, 直接对已有 packet_dump 导出 UIGF (跳过其它 flag 参数)
++        var dumpArg = Array.FindIndex(args, a => string.Equals(a, "--export-dump", StringComparison.OrdinalIgnoreCase));
++        if (dumpArg >= 0) {
++            var dumpPath = args.Skip(dumpArg + 1).FirstOrDefault(a => !a.StartsWith("--"));
++            if (dumpPath != null) {
++                GlobalVars.PauseOnExit = false;
++                PacketCapture.ExportDump(dumpPath);
++                Environment.Exit(0);
+             }
+-        } catch (Exception) { /* ignored */ }
++        }
++
++        // --quest / --quest-uigf: 任务捕获 + UIGF Quest Record 导出 (跳过成就导出)
++        var questMode = args.Contains("--quest", StringComparer.OrdinalIgnoreCase)
++            || args.Contains("--quest-uigf", StringComparer.OrdinalIgnoreCase);
++        // 去掉标记参数, 避免被当成位置参数 (gamePath / exportTarget / useLocalLib)
++        var posArgs = args.Where(a => !a.StartsWith("--quest", StringComparison.OrdinalIgnoreCase)).ToArray();
++        // quest 模式强制用本地 Lib (含全量包捕获改动), 避免更新系统覆盖成官方 Lib
++        await CheckUpdate(questMode || ToBooleanOrDefault(posArgs.ElementAtOrDefault(2)));
+ 
+-        if (data != null && CacheFile.GetLastWriteTime("achievement_data").AddMinutes(60) > DateTime.UtcNow) {
+-            var prompt = new SelectionPromptCompat<string>()
+-                .Title(App.UsePreviousData)
+-                .AddChoices(App.CommonYes, App.CommonNo);
+-            if (prompt.Prompt() == App.CommonYes) {
+-                Export.Choose(data);
+-                return;
++        AppConfig.Load(posArgs.ElementAtOrDefault(0) ?? "auto");
++        Export.ExportTo = ToIntOrDefault(posArgs.ElementAtOrDefault(1), 114514);
++
++        // --quest: 只做全量同步捕获 + 任务导出, 跳过成就导出 (成就逻辑原样保留, 不传 --quest 即旧行为)
++        if (!questMode) {
++            AchievementAllDataNotify? data = null;
++            try {
++                if (CacheFile.TryRead("achievement_data", out var cache)) {
++                    data = AchievementAllDataNotify.ParseFrom(cache.Content.ToByteArray());
++                }
++            } catch (Exception) { /* ignored */ }
++
++            if (data != null && CacheFile.GetLastWriteTime("achievement_data").AddMinutes(60) > DateTime.UtcNow) {
++                var prompt = new SelectionPromptCompat<string>()
++                    .Title(App.UsePreviousData)
++                    .AddChoices(App.CommonYes, App.CommonNo);
++                if (prompt.Prompt() == App.CommonYes) {
++                    Export.Choose(data);
++                    return;
++                }
+             }
++        } else {
++            AnsiConsole.WriteLine("任务捕获模式 (--quest): 登录进世界后导出全部任务数据。");
+         }
+ 
+         StartAndWaitResult(AppConfig.GamePath, new Dictionary<int, Func<BinaryReader, bool>> {
+             { 1, AchievementAllDataNotify.OnReceive },
+             { 2, PlayerStoreNotify.OnReceive },
+             { 3, PlayerPropNotify.OnReceive },
++            { 4, PacketCapture.OnReceive },
+         }, () => {
+ #if DEBUG_EX
+             PlayerPropNotify.OnFinish();
+@@ -79,7 +105,13 @@ public static async Task Main(string[] args) {
+                 DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+             }));
+ #endif
+-            AchievementAllDataNotify.OnFinish();
++            // 先落盘全量包 + 导出任务, 再做成就导出 (不传 --quest 时行为不变)
++            PacketCapture.OnFinish();
++            if (!questMode) {
++                AchievementAllDataNotify.OnFinish();
++            } else {
++                AnsiConsole.WriteLine("任务捕获完成, 请查看 packet_dump_*.bin 与 quests_*.json/csv。");
++            }
+             Environment.Exit(0);
+         });
+         while (true) {}
+diff --git a/YaeAchievement/src/Utilities/Extensions/Stream.cs b/YaeAchievement/src/Utilities/Extensions/Stream.cs
+index cf88978..ede8d81 100644
+--- a/YaeAchievement/src/Utilities/Extensions/Stream.cs
++++ b/YaeAchievement/src/Utilities/Extensions/Stream.cs
+@@ -12,7 +12,7 @@ internal static class BinaryReaderExtensions {
+     public static byte[] ReadBytes(this BinaryReader reader) {
+         try {
+             var length = reader.ReadInt32();
+-            if (length is < 0 or > 114514 * 2) {
++            if (length is < 0 or > 16 * 1024 * 1024) { // 单个全量同步包可能较大
+                 throw new ArgumentException(nameof(length));
+             }
+             return reader.ReadBytes(length);
+diff --git a/YaeAchievementLib/src/Application.cs b/YaeAchievementLib/src/Application.cs
+index dc840a2..8efdf72 100644
+--- a/YaeAchievementLib/src/Application.cs
++++ b/YaeAchievementLib/src/Application.cs
+@@ -50,10 +50,18 @@ private static int OnToInt32(byte* val, int startIndex) {
+             return ret;
+         }
+         var cmdId = BinaryPrimitives.ReverseEndianness(*(ushort*) (val + 2));
+-        if (cmdId == CmdId.PlayerStoreNotify) {
+-            Goshujin.PushStoreData(GetData(val));
+-        } else if (cmdId == CmdId.AchievementAllDataNotify) {
+-            Goshujin.PushAchievementData(GetData(val));
++        // 全量捕获: 任何解密后的网包都推给 GUI (任务/背包/成就等全量同步数据)。
++        // 不依赖 cmdId 白名单, 保证 QuestListNotify / QuestUpdateNotify 一定被拿到。
++        try {
++            var data = GetData(val);
++            Goshujin.PushPacket(cmdId, data);
++            if (cmdId == CmdId.PlayerStoreNotify) {
++                Goshujin.PushStoreData(data);
++            } else if (cmdId == CmdId.AchievementAllDataNotify) {
++                Goshujin.PushAchievementData(data);
++            }
++        } catch (InvalidDataException) {
++            // 个别包格式异常时跳过, 不影响整体捕获
+         }
+         return ret;
+         static Span<byte> GetData(byte* val) {
+diff --git a/YaeAchievementLib/src/Goshujin.cs b/YaeAchievementLib/src/Goshujin.cs
+index e2c47a5..0697740 100644
+--- a/YaeAchievementLib/src/Goshujin.cs
++++ b/YaeAchievementLib/src/Goshujin.cs
+@@ -59,6 +59,19 @@ public static void PushAchievementData(Span<byte> data) {
+         }
+     }
+ 
++    /// <summary>
++    /// 把任意解密后、解压后的网包内容 (cmdId + protobuf payload) 推给 GUI。
++    /// GUI 侧写入 <c>packet_dump_*.bin</c> 供离线分析 (任务/背包/剧情等全量同步数据)。
++    /// </summary>
++    public static void PushPacket(uint cmdId, ReadOnlySpan<byte> data) {
++        using (_lock.EnterScope()) {
++            _pipeWriter.Write((byte) 4);
++            _pipeWriter.Write(cmdId);
++            _pipeWriter.Write(data.Length);
++            _pipeWriter.Write(data);
++        }
++    }
++
+     public static void PushStoreData(Span<byte> data) {
+         using (_lock.EnterScope()) {
+             _pipeWriter.Write((byte) 2);

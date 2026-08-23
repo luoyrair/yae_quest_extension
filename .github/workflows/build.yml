@@ -1,0 +1,23 @@
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest   # 自带 git / .NET SDK / VS Build Tools
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: 一键构建扩展 Yae (拉取 + 补丁 + AOT 发布)
+        run: powershell -ExecutionPolicy Bypass -File build.ps1 -YaeDir "build\Yae"
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: publish_quest
+          path: build/Yae/publish_quest
+          if-no-files-found: error
