@@ -33,18 +33,18 @@ Yae\publish_quest\YaeAchievement.exe --export-dump packet_dump_xxx.bin
 
 | 文件 | 内容 |
 |---|---|
-| `uigf_quest_record_v1_*.json` | **UIGF Quest Record v1.0**（默认，纯数据：完成历史 + 任务簿） |
+| `uigf_quest_record_v1_*.json` | **UIGF Quest Record v1.1**（默认，纯数据：完成历史 + 任务簿） |
 | `full_sync_*.json` | 账号状态（`--full-sync` 时额外导出，可选） |
 
 ```json
 {
   "info": {
     "export_app": "YaeAchievement(quest)",
-    "uigf_quest_version": "v1.0",
+    "uigf_quest_version": "v1.1",
     "source": { "packet_dumps": [], "game_version": "7.0.0" }
   },
   "list": {
-    "finished_parent_quests": [ { "parent_quest_id": 100001, "finish_time": 1111111111 } ],
+    "finished_parent_quests": [ { "parent_quest_id": 100001, "accept_time": 1111111111 } ],
     "quest_book": [ { "quest_id": 100101, "parent_quest_id": 100001, "state": 3,
                       "start_time": 1111111111, "accept_time": 1111111111, "finish_progress": 0 } ]
   }
