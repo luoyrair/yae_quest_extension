@@ -7,9 +7,13 @@
 
 | 包 | cmdId | 列表字段 | 关键字段 |
 |---|---|---|---|
-| QuestListNotify | 2516 | 15 | quest_id=1, state=2, start_time=9, accept_time=4, parent_quest_id=6, finish_progress=11 |
-| FinishedParentQuestNotify | 23849 | 12 | parent_quest_id=12, finish_time=2 |
+| QuestListNotify | 2516 | 15 | quest_id=1, state=2, start_time=4, accept_time=9, parent_quest_id=6, finish_progress=11 |
+| FinishedParentQuestNotify | 23849 | 12 | parent_quest_id=12, accept_time=2 (**无 finish_time**) |
 | AchievementAllDataNotify | 29910 | 5 | id=5, status=8, progress=9 |
+
+> 字段号以官方 7.0.0 proto (`capyb2222/genshin-protocol`) + LunaGC 服务端实现为准。
+> `FinishedParentQuestNotify` 里的父任务**只有接取时间 (accept_time=2)**，
+> 协议不含完成时间戳；完成状态由"是否在该列表"表达，完成时刻不可得。
 
 代码位置: `files/YaeAchievement/src/Parsers/FullSyncExporter.cs`
 (`QuestCmd`/`ParentCmd`/`AchCmd` 常量 + `ParseQuest`/`ParseParent`/`ParseAch`)。
@@ -19,8 +23,9 @@
 Yae 元数据 (`AchievementInfo.proto`) 只维护成就字段号 (`pb_info`), **没有任务字段号**
 —— Yae 原生不做任务解析。因此任务字段号没有权威元数据可依赖, 只能硬编码 + 实测校准。
 
-> 已实测验证: quest 字段 4/9 在 v7.0 中与 Grasscutter 3.8 proto 命名相反
-> (3.8: start_time=4/accept_time=9; v7.0 数据行为: 字段9所有任务有=创建时间, 字段4仅已接取=接取时间)。
+> 字段号核对: 官方 7.0.0 proto 与 LunaGC 均标 `Quest.start_time=4 / accept_time=9`,
+> 与 Grasscutter 3.8 一致 (v7.0 未改号)。数据行为佐证: 未接取 (state=1) 任务有 accept_time(9)
+> 无 start_time(4) —— 入册即记 accept_time, 开始才记 start_time。
 > 成就字段号与 Yae 元数据一致 (id=5, status=8, total=9, current=6, finish=2)。
 
 ## 大版本更新后如何校准

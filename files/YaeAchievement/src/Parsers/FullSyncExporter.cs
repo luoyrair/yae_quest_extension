@@ -8,8 +8,8 @@ namespace YaeAchievement.Parsers;
 
 /// <summary>
 /// 全量同步账号状态导出器 (v7.0.0 实测字段号, 见 tools/parse_full_sync.py):
-///   cmd 2516  QuestListNotify            -> 任务簿 (子任务状态)
-///   cmd 23849 FinishedParentQuestNotify  -> 父任务完成历史 (含完成时间戳)
+///   cmd 2516  QuestListNotify            -> 任务簿 (子任务状态; start_time=4, accept_time=9)
+///   cmd 23849 FinishedParentQuestNotify  -> 父任务完成历史 (成员关系=完成; 无完成时间戳, accept_time=2)
 ///   cmd 29910 AchievementAllDataNotify   -> 成就状态
 ///
 /// 进程内累加: PacketCapture 把每个网包喂给 AddPacket, 结束后 Export 导出:
@@ -73,7 +73,7 @@ public static class FullSyncExporter {
         var now = DateTime.Now;
         var source = string.IsNullOrEmpty(sourceLabel) ? [] : new List<string> { sourceLabel };
 
-        // UIGF Quest Record v1.0 (默认输出, 纯数据)
+        // UIGF Quest Record v1.1 (默认输出, 纯数据)
         ExportQuestRecord(now, source);
 
         // full_sync (可选)
@@ -101,8 +101,8 @@ public static class FullSyncExporter {
             QuestId = qid.Value,
             State = st.Value,
             StateName = QuestStateName(st.Value),
-            StartTime = f.GetFirstVarint(9) ?? 0,
-            AcceptTime = f.GetFirstVarint(4) ?? 0,
+            StartTime = f.GetFirstVarint(4) ?? 0,   // start_time=字段4 (官方/LunaGC 约定)
+            AcceptTime = f.GetFirstVarint(9) ?? 0,  // accept_time=字段9 (入册即记, 未接取任务也有)
             ParentQuestId = f.GetFirstVarint(6) ?? 0,
             FinishProgress = f.GetFirstVarint(11) ?? 0,
         };
@@ -112,7 +112,8 @@ public static class FullSyncExporter {
         var f = ProtoWalker.Walk(data);
         var pid = f.GetFirstVarint(12);
         if (pid == null) return null;
-        return new SyncParent { ParentQuestId = pid.Value, FinishTime = f.GetFirstVarint(2) ?? 0 };
+        // ParentQuest 无 finish_time 字段; 字段2 是 accept_time (官方 7.0.0 proto + LunaGC 双确认)
+        return new SyncParent { ParentQuestId = pid.Value, AcceptTime = f.GetFirstVarint(2) ?? 0 };
     }
 
     private static SyncAchievement? ParseAch(ReadOnlySpan<byte> data) {
@@ -128,13 +129,13 @@ public static class FullSyncExporter {
         };
     }
 
-    /// <summary>导出 UIGF Quest Record v1.0 (纯数据: 完成历史 + 任务簿, 展示由消费端解析)。</summary>
+    /// <summary>导出 UIGF Quest Record v1.1 (纯数据: 完成历史 + 任务簿, 展示由消费端解析)。</summary>
     private static void ExportQuestRecord(DateTime now, List<string> source) {
         var outJson = new QuestRecordJson {
             Info = new QuestRecordInfo {
                 ExportApp = "YaeAchievement(quest)",
                 ExportAppVersion = "1.0.0",
-                UigfQuestVersion = "v1.0",
+                UigfQuestVersion = "v1.1",
                 ExportTimestamp = (long) DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
                 ExportTime = now.ToString("yyyy-MM-dd HH:mm:ss"),
                 Timezone = "UTC+8",
@@ -184,7 +185,7 @@ public sealed class QuestRecordSource {
 public sealed class QuestRecordInfo {
     public string ExportApp { get; set; } = "YaeAchievement(quest)";
     public string ExportAppVersion { get; set; } = "1.0.0";
-    public string UigfQuestVersion { get; set; } = "v1.0";
+    public string UigfQuestVersion { get; set; } = "v1.1";
     public long ExportTimestamp { get; set; }
     public string ExportTime { get; set; } = "";
     public string Timezone { get; set; } = "UTC+8";
@@ -231,7 +232,8 @@ public sealed class SyncQuest {
 
 public sealed class SyncParent {
     public ulong ParentQuestId { get; set; }
-    public ulong FinishTime { get; set; }
+    /// <summary>父任务接取时间 (ParentQuest.accept_time=字段2)。完成时间协议不提供。</summary>
+    public ulong AcceptTime { get; set; }
 }
 
 public sealed class SyncAchievement {

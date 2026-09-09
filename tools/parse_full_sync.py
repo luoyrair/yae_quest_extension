@@ -7,9 +7,10 @@ parse_full_sync.py — 从 packet_dump 解析全量同步, 输出 full_sync JSON
 
 字段号 (v7.0.0 实测):
   cmd 2516  QuestListNotify            -> 任务簿, 列表字段 15
-  cmd 23849 FinishedParentQuestNotify  -> 完成历史, 列表字段 12, parent_id=12, finish_time=2
+  cmd 23849 FinishedParentQuestNotify  -> 完成历史, 列表字段 12, parent_id=12, accept_time=2
   cmd 29910 AchievementAllDataNotify   -> 成就, 列表字段 5, id=5, status=8, progress=9
-  Quest: quest_id=1, state=2, start_time=9, accept_time=4, parent_quest_id=6, finish_progress=11
+  Quest: quest_id=1, state=2, start_time=4, accept_time=9, parent_quest_id=6, finish_progress=11
+  (字段号以官方 7.0.0 proto + LunaGC 为准; ParentQuest 无 finish_time, 完成时间不可得)
 
 用法:
   python parse_full_sync.py <packet_dump_*.bin>... [-o out.json]
@@ -99,8 +100,8 @@ def parse_quest(data):
         return None
     return {"quest_id": qid, "state": st,
             "state_name": QUEST_STATE.get(st, f"UNKNOWN_{st}"),
-            "start_time": first_varint(f, 9) or 0,
-            "accept_time": first_varint(f, 4) or 0,
+            "start_time": first_varint(f, 4) or 0,
+            "accept_time": first_varint(f, 9) or 0,
             "parent_quest_id": first_varint(f, 6) or 0,
             "finish_progress": first_varint(f, 11) or 0}
 
@@ -110,7 +111,7 @@ def parse_parent(data):
     pid = first_varint(f, 12)
     if pid is None:
         return None
-    return {"parent_quest_id": pid, "finish_time": first_varint(f, 2) or 0}
+    return {"parent_quest_id": pid, "accept_time": first_varint(f, 2) or 0}
 
 
 def parse_ach(data):

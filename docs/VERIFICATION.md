@@ -29,7 +29,8 @@
 |---|---|
 | `FileStream.Read` 返回字节数不足导致丢包 | 改用 `ReadExactly` |
 | `len=0` 空负载包被误判为异常而 break | 只拒绝负数, 允许 len=0 |
-| Quest 字段 4/9 命名 (3.8 proto 与 v7.0 行为相反) | 按数据行为修正: start_time=9 / accept_time=4 |
+| ~~Quest 字段 4/9 命名 (曾误判 v7.0 行为相反, 标为 start_time=9/accept_time=4)~~ | 经官方 7.0.0 proto + LunaGC 服务端确认字段号未变: **start_time=4 / accept_time=9**, 已改回 |
+| ParentQuest 字段 2 被误当 finish_time | 字段2 实为 **accept_time**; 协议无完成时间戳, UIGF 输出 `accept_time` |
 | PowerShell 5.1 解析 UTF-8 中文脚本失败 | 文件加 UTF-8 BOM |
 | Lib 发布时 NuGet pack 对 `-o` 覆盖目录报无害错误 | 改为检查 DLL 文件是否生成, 不查退出码 |
 

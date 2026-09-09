@@ -1,4 +1,4 @@
-# 输出格式: UIGF Quest Record v1.0
+# 输出格式: UIGF Quest Record v1.1
 
 设计原则: 只含**游戏内原始记录**, 不含展示层派生信息
 (名称/章节/视频/主线聚合由**消费端**解析, 数据端与展示完全解耦)。
@@ -15,7 +15,7 @@ Schema: `Genshin Mainline Tracker/schema/quest-record.schema.json` (JSON Schema 
   "info": {
     "export_app": "YaeAchievement(quest)",
     "export_app_version": "1.0.0",
-    "uigf_quest_version": "v1.0",
+    "uigf_quest_version": "v1.1",
     "export_timestamp": 1111111111,
     "export_time": "2030-01-01 00:00:00",
     "timezone": "UTC+8",
@@ -27,7 +27,7 @@ Schema: `Genshin Mainline Tracker/schema/quest-record.schema.json` (JSON Schema 
   },
   "list": {
     "finished_parent_quests": [
-      { "parent_quest_id": 100001, "finish_time": 1111111111 }
+      { "parent_quest_id": 100001, "accept_time": 1111111111 }
     ],
     "quest_book": [
       { "quest_id": 100101, "parent_quest_id": 100001, "state": 3,
@@ -49,7 +49,7 @@ Schema: `Genshin Mainline Tracker/schema/quest-record.schema.json` (JSON Schema 
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | parent_quest_id | integer | 父任务 ID (MainQuest ID) |
-| finish_time | integer | 完成 Unix 秒 |
+| accept_time | integer | 接取 Unix 秒 (协议无完成时间戳, 完成时刻不可得) |
 
 ### quest_book 项
 
