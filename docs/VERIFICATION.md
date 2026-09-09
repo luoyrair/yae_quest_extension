@@ -7,12 +7,13 @@
 上游 HolographicHat/Yae 更新到 5.8.0, 已**内置全量抓包机制**:
 DLL 侧 `RequiredPackets` 白名单 (`LoadTasks` 0xFA) + `PushPacketData` (类型 4) + ack 流。
 
-扩展改为**只改 GUI 侧**:
-- `Utils.cs`: 0xFA 白名单注册任务 cmd (2516/23849) + 0x04 分发到 `FullSyncExporter` (quest 模式)
+扩展改为**只改 GUI 侧 + 只处理任务包 (纯增量, 不碰 Yae 原生)**:
+- `Utils.cs`: 0xFA 白名单注册任务 cmd (2516/23849) + 0x04 仅把任务包喂给 `FullSyncExporter`
+  (成就/背包包照旧走 Yae 原生 `OnReceive`, 不劫持)
 - `Program.cs`: --quest / --export-dump / --full-sync 标志
 - `Stream.cs`: 全量同步包缓冲上限 114514*2 → 16MB
 - 废弃: 旧 DLL 侧补丁 (Application.cs / Goshujin.cs / GlobalVars.cs) 与 PacketCapture.cs
-- 新文件仅 `FullSyncExporter.cs` (含离线 ExportDump)
+- 新文件仅 `FullSyncExporter.cs` (含离线 ExportDump; **不解析成就**, 成就为 Yae 原生领域)
 
 本地完整 `build.ps1` 验证: 补丁干净应用 + GUI/Lib AOT 发布通过 + 组装产物。
 
@@ -22,9 +23,10 @@ DLL 侧 `RequiredPackets` 白名单 (`LoadTasks` 0xFA) + `PushPacketData` (类�
 |---|---|
 | 解析子任务 (QuestListNotify) | 1546 |
 | 解析完成历史 (FinishedParentQuestNotify) | 1106 |
-| 解析成就 (AchievementAllDataNotify) | 1845 |
 | 与消费端项目内部样例逐项对比 | **完全一致** |
 | `quest-record.schema.json` 校验 | **通过** |
+
+> 成就不在扩展范围 (Yae 原生处理), 不在本表。
 
 ## 2. 一键构建 (build.ps1)
 

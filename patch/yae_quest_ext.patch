@@ -96,7 +96,7 @@ index cf88978..ede8d81 100644
              }
              return reader.ReadBytes(length);
 diff --git a/YaeAchievement/src/Utils.cs b/YaeAchievement/src/Utils.cs
-index 3490cff..24b4c5e 100644
+index 3490cff..3d9f22f 100644
 --- a/YaeAchievement/src/Utils.cs
 +++ b/YaeAchievement/src/Utils.cs
 @@ -10,6 +10,7 @@
@@ -107,22 +107,19 @@ index 3490cff..24b4c5e 100644
  using Proto;
  using Spectre.Console;
  using YaeAchievement.Parsers;
-@@ -261,6 +262,11 @@ public static void StartAndWaitResult(string exePath, Action onFinish) {
+@@ -260,6 +261,7 @@ public static void StartAndWaitResult(string exePath, Action onFinish) {
+                             break;
                          case 0x04:
                              var cmdId = reader.ReadUInt16();
++                            // 原生成就/背包包照旧走 Yae 原生 OnReceive (纯增量, 不劫持)
                              if (cmdId == nativeConf.AchievementCmdId) {
-+                                if (FullSyncExporter.QuestMode) {
-+                                    FullSyncExporter.AddPacket(cmdId, reader.ReadBytes());
-+                                    writer.Write(true);
-+                                    break;
-+                                }
                                  writer.Write(AchievementAllDataNotify.OnReceive(reader));
                                  break;
-                             }
-@@ -268,11 +274,18 @@ public static void StartAndWaitResult(string exePath, Action onFinish) {
+@@ -268,11 +270,19 @@ public static void StartAndWaitResult(string exePath, Action onFinish) {
                                  writer.Write(PlayerStoreNotify.OnReceive(reader));
                                  break;
                              }
++                            // 扩展仅额外捕获任务包 (quest 模式)
 +                            if (FullSyncExporter.QuestMode && (cmdId == FullSyncExporter.QuestListCmd || cmdId == FullSyncExporter.ParentCmd)) {
 +                                FullSyncExporter.AddPacket(cmdId, reader.ReadBytes());
 +                            }

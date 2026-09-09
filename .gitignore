@@ -26,3 +26,7 @@ obj/
 # 系统
 Thumbs.db
 .DS_Store
+
+# Python
+__pycache__/
+*.pyc

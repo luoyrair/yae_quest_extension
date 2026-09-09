@@ -12,7 +12,8 @@
 
 - **UIGF Quest Record v1.1 导出**：完成历史 + 任务簿，**纯数据**，展示由消费端解析
   （详见 [docs/FORMAT.md](docs/FORMAT.md) 与消费端 [Genshin Mainline Tracker](https://github.com/luoyrair/Genshin_Mainline_Tracker)）
-- **全量同步包捕获**：任务簿 / 父任务完成历史 / 成就，导出 `uigf_quest_record_v1_*.json`（可选 `full_sync_*.json`）
+- **任务全量同步捕获**：任务簿 + 父任务完成历史，导出 `uigf_quest_record_v1_*.json`（可选 `full_sync_*.json`）
+  （成就是 **Yae 原生功能**，本扩展纯增量只处理任务，不解析成就）
 - **离线重导出**：`--export-dump packet_dump_*.bin` 不开游戏即可从旧抓包重导出（回归验证用）
 - **一键构建**：`build.ps1` 拉取 → 打补丁 → AOT 发布，依赖自动检测/安装（Win11 winget）
 

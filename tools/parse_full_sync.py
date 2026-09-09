@@ -1,14 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-parse_full_sync.py — 从 packet_dump 解析全量同步, 输出 full_sync JSON
+parse_full_sync.py — 从 packet_dump 解析任务全量同步, 输出 full_sync JSON
 
 用途: 作为版本字段号校准的参考工具 (与扩展内 FullSyncExporter.cs 逻辑一致)。
-自包含, 无本地数据依赖。
+自包含, 无本地数据依赖。成就由 Yae 原生处理, 非本扩展范围, 不解析。
 
 字段号 (v7.0.0 实测):
   cmd 2516  QuestListNotify            -> 任务簿, 列表字段 15
   cmd 23849 FinishedParentQuestNotify  -> 完成历史, 列表字段 12, parent_id=12, accept_time=2
-  cmd 29910 AchievementAllDataNotify   -> 成就, 列表字段 5, id=5, status=8, progress=9
   Quest: quest_id=1, state=2, start_time=4, accept_time=9, parent_quest_id=6, finish_progress=11
   (字段号以官方 7.0.0 proto + LunaGC 为准; ParentQuest 无 finish_time, 完成时间不可得)
 
@@ -16,12 +15,10 @@ parse_full_sync.py — 从 packet_dump 解析全量同步, 输出 full_sync JSON
   python parse_full_sync.py <packet_dump_*.bin>... [-o out.json]
 """
 import struct, sys, json, datetime
-from collections import Counter
 
-QUESTS_CMD, PARENT_CMD, ACH_CMD = 2516, 23849, 29910
+QUESTS_CMD, PARENT_CMD = 2516, 23849
 QUEST_STATE = {0: "NONE", 1: "UNSTARTED", 2: "UNFINISHED", 3: "FINISHED",
                4: "REWARD_TAKEN", 5: "FAILED"}
-ACH_STATUS = {0: "INVALID", 1: "UNFINISHED", 2: "FINISHED", 3: "REWARD_TAKEN"}
 
 
 def read_varint(b, o):
@@ -114,17 +111,6 @@ def parse_parent(data):
     return {"parent_quest_id": pid, "accept_time": first_varint(f, 2) or 0}
 
 
-def parse_ach(data):
-    f = walk_message(data)
-    aid = first_varint(f, 5)
-    st = first_varint(f, 8)
-    if aid is None or st is None or st > 4:
-        return None
-    return {"achievement_id": aid, "status": st,
-            "status_name": ACH_STATUS.get(st, f"UNKNOWN_{st}"),
-            "progress": first_varint(f, 9) or 0}
-
-
 def extract_ld_list(payload, field):
     f = walk_message(payload)
     return [v for v in f.get(field, []) if isinstance(v, bytes)]
@@ -146,7 +132,7 @@ def main():
             paths.append(args[i])
             i += 1
 
-    quests, parents, achs = {}, {}, {}
+    quests, parents = {}, {}
     for path in paths:
         for cmd, payload in load_dump(path):
             if cmd == QUESTS_CMD:
@@ -159,20 +145,13 @@ def main():
                     p = parse_parent(ld)
                     if p:
                         parents[p["parent_quest_id"]] = p
-            elif cmd == ACH_CMD:
-                for ld in extract_ld_list(payload, 5):
-                    a = parse_ach(ld)
-                    if a:
-                        achs[a["achievement_id"]] = a
 
-    print(f"子任务: {len(quests)} | 完成历史: {len(parents)} | 成就: {len(achs)}")
-    print(f"成就状态: {dict(Counter(a['status_name'] for a in achs.values()))}")
+    print(f"子任务: {len(quests)} | 完成历史: {len(parents)}")
 
     out = {"source": paths, "sub_quests": len(quests),
            "generated_at": datetime.datetime.now().isoformat(),
            "quests": sorted(quests.values(), key=lambda x: x["quest_id"]),
-           "parent_quests": sorted(parents.values(), key=lambda x: x["parent_quest_id"]),
-           "achievements": sorted(achs.values(), key=lambda x: x["achievement_id"])}
+           "parent_quests": sorted(parents.values(), key=lambda x: x["parent_quest_id"])}
     out_path = out_path or f"full_sync_{datetime.datetime.now():%Y%m%d%H%M%S}.json"
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(out, f, ensure_ascii=False, indent=1)

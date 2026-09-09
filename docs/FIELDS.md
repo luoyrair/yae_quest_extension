@@ -1,22 +1,23 @@
 # 版本相关字段号 (v7.0.0 实测) 与校准方法
 
-> 扩展在 `OnToInt32` 钩子里对所有解密后的 0x6745 包做解压(与 Yae 原生成就同机制),
-> 再按 cmdId + 字段号解析。以下 cmdId/字段号是 **v7.0.0 实测硬编码** 的。
+> 扩展**只处理任务包** (纯增量, 不碰 Yae 原生功能)。
+> 包捕获复用上游 Yae 5.8.0 内置机制 (DLL `RequiredPackets` 白名单 + 类型 4 推送),
+> GUI 侧 `Utils.cs` 在 0xFA 白名单注册任务 cmd、0x04 把任务包喂给 `FullSyncExporter`。
+> 成就 (AchievementAllDataNotify) 是 **Yae 原生领域**, 本扩展不解析, 此处不列出。
 
-## 三个全量同步包
+## 两个任务包
 
 | 包 | cmdId | 列表字段 | 关键字段 |
 |---|---|---|---|
 | QuestListNotify | 2516 | 15 | quest_id=1, state=2, start_time=4, accept_time=9, parent_quest_id=6, finish_progress=11 |
 | FinishedParentQuestNotify | 23849 | 12 | parent_quest_id=12, accept_time=2 (**无 finish_time**) |
-| AchievementAllDataNotify | 29910 | 5 | id=5, status=8, progress=9 |
 
 > 字段号以官方 7.0.0 proto (`capyb2222/genshin-protocol`) + LunaGC 服务端实现为准。
 > `FinishedParentQuestNotify` 里的父任务**只有接取时间 (accept_time=2)**，
 > 协议不含完成时间戳；完成状态由"是否在该列表"表达，完成时刻不可得。
 
 代码位置: `files/YaeAchievement/src/Parsers/FullSyncExporter.cs`
-(`QuestCmd`/`ParentCmd`/`AchCmd` 常量 + `ParseQuest`/`ParseParent`/`ParseAch`)。
+(`QuestListCmd`/`ParentCmd` 常量 + `ParseQuest`/`ParseParent`) 与 `Utils.cs` 0x04/0xFA。
 
 ## 为什么是硬编码
 
@@ -26,7 +27,6 @@ Yae 元数据 (`AchievementInfo.proto`) 只维护成就字段号 (`pb_info`), **
 > 字段号核对: 官方 7.0.0 proto 与 LunaGC 均标 `Quest.start_time=4 / accept_time=9`,
 > 与 Grasscutter 3.8 一致 (v7.0 未改号)。数据行为佐证: 未接取 (state=1) 任务有 accept_time(9)
 > 无 start_time(4) —— 入册即记 accept_time, 开始才记 start_time。
-> 成就字段号与 Yae 元数据一致 (id=5, status=8, total=9, current=6, finish=2)。
 
 ## 大版本更新后如何校准
 
@@ -38,9 +38,9 @@ Yae 元数据 (`AchievementInfo.proto`) 只维护成就字段号 (`pb_info`), **
    ```
 
    `tools/parse_full_sync.py` 是独立 Python 解析器 (与 `FullSyncExporter.cs` 逻辑一致),
-   无本地数据依赖。若它能正确解析出子任务/完成历史/成就, 说明 cmdId + 字段号未变;
+   无本地数据依赖。若它能正确解析出子任务/完成历史, 说明 cmdId + 字段号未变;
    解析异常则对照新版本抓包逐字段核对, 更新 `files/YaeAchievement/src/Parsers/FullSyncExporter.cs`
-   中的 `QuestCmd`/`ParentCmd`/`AchCmd` 常量与 `ParseQuest`/`ParseParent`/`ParseAch` 字段号。
+   中的 `QuestListCmd`/`ParentCmd` 常量与 `ParseQuest`/`ParseParent` 字段号。
 3. 重新生成补丁 (`scripts/regenerate_patch.ps1`) 并 `build.ps1` 验证。
 
 ## 任务状态码 (quest_book.state)
