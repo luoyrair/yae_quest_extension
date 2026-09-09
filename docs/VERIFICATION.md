@@ -2,6 +2,20 @@
 
 > 验证环境: Windows 11, 游戏 7.0.0 国服, 一份完整登录全量同步抓包 (内部验证)
 
+## 0. 2026-09-09 移植: 适配上游 5.8.0 (CI 修复)
+
+上游 HolographicHat/Yae 更新到 5.8.0, 已**内置全量抓包机制**:
+DLL 侧 `RequiredPackets` 白名单 (`LoadTasks` 0xFA) + `PushPacketData` (类型 4) + ack 流。
+
+扩展改为**只改 GUI 侧**:
+- `Utils.cs`: 0xFA 白名单注册任务 cmd (2516/23849) + 0x04 分发到 `FullSyncExporter` (quest 模式)
+- `Program.cs`: --quest / --export-dump / --full-sync 标志
+- `Stream.cs`: 全量同步包缓冲上限 114514*2 → 16MB
+- 废弃: 旧 DLL 侧补丁 (Application.cs / Goshujin.cs / GlobalVars.cs) 与 PacketCapture.cs
+- 新文件仅 `FullSyncExporter.cs` (含离线 ExportDump)
+
+本地完整 `build.ps1` 验证: 补丁干净应用 + GUI/Lib AOT 发布通过 + 组装产物。
+
 ## 1. UIGF Quest Record 输出
 
 | 检查 | 结果 |

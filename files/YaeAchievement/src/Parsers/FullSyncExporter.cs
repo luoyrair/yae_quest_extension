@@ -19,9 +19,15 @@ namespace YaeAchievement.Parsers;
 /// </summary>
 public static class FullSyncExporter {
 
-    private const uint QuestCmd = 2516;   // QuestListNotify
-    private const uint ParentCmd = 23849; // FinishedParentQuestNotify
-    private const uint AchCmd = 29910;    // AchievementAllDataNotify
+    public const uint QuestListCmd = 2516;   // QuestListNotify
+    public const uint ParentCmd = 23849;     // FinishedParentQuestNotify
+    public const uint AchCmd = 29910;        // AchievementAllDataNotify
+
+    /// <summary>是否额外导出 full_sync_*.json (--full-sync)。</summary>
+    public static bool EmitFullSync { get; set; }
+
+    /// <summary>任务捕获模式 (--quest/--quest-uigf): Utils.cs 按此注册白名单并分发全量同步包。</summary>
+    public static bool QuestMode { get; set; }
 
     private static readonly string[] QuestStateNames = [
         "NONE", "UNSTARTED", "UNFINISHED", "FINISHED", "REWARD_TAKEN", "FAILED"
@@ -38,8 +44,29 @@ public static class FullSyncExporter {
     private static readonly Dictionary<ulong, SyncParent> Parents = [];
     private static readonly Dictionary<ulong, SyncAchievement> Achs = [];
 
-    /// <summary>是否额外导出 full_sync_*.json (--full-sync)。</summary>
-    public static bool EmitFullSync { get; set; }
+    /// <summary>离线模式: 直接对已有 packet_dump.bin 执行导出 (读入累加器, 不启动游戏)。</summary>
+    public static void ExportDump(string path) {
+        var dumpPath = Path.GetFullPath(path);
+        if (!File.Exists(dumpPath)) {
+            AnsiConsole.WriteLine($"文件不存在: {dumpPath}");
+            return;
+        }
+        Clear();
+        using var fs = File.OpenRead(dumpPath);
+        var h = new byte[8];
+        var b = new byte[1 << 20];
+        while (fs.Position < fs.Length) {
+            try { fs.ReadExactly(h, 0, 8); } catch (EndOfStreamException) { break; }
+            var c = BitConverter.ToUInt32(h, 0);
+            var l = BitConverter.ToInt32(h, 4);
+            if (l < 0 || l > (1 << 24)) break; // len=0 是合法的空负载包
+            if (l > b.Length) b = new byte[l];
+            try { fs.ReadExactly(b, 0, l); } catch (EndOfStreamException) { break; }
+            AddPacket(c, b.AsSpan(0, l));
+        }
+        AnsiConsole.WriteLine($"离线导出模式: {dumpPath}");
+        Export(dumpPath);
+    }
 
     public static void Clear() {
         Quests.Clear();
@@ -49,7 +76,7 @@ public static class FullSyncExporter {
 
     /// <summary>把单个网包加入累加器 (进程内解析, 不落盘 .bin)。</summary>
     public static void AddPacket(uint cmdId, ReadOnlySpan<byte> payload) {
-        if (cmdId == QuestCmd) {
+        if (cmdId == QuestListCmd) {
             foreach (var ld in ProtoWalker.Walk(payload).GetLD(15)) {
                 var q = ParseQuest(ld.Data);
                 if (q != null) Quests[q.QuestId] = q;
@@ -209,6 +236,97 @@ public sealed class QuestRecordList {
 public sealed class QuestRecordJson {
     public QuestRecordInfo Info { get; set; } = new();
     public QuestRecordList List { get; set; } = new();
+}
+
+internal static class ProtoWalker {
+
+    public readonly record struct LD(byte[] Data);
+
+    public static Dictionary<int, List<object>> Walk(ReadOnlySpan<byte> b) {
+        var fields = new Dictionary<int, List<object>>();
+        var off = 0;
+        while (off < b.Length) {
+            if (!TryReadVarint(b, ref off, out var tag)) break;
+            var field = (int) (tag >> 3);
+            var wire = (int) (tag & 7);
+            if (field == 0) break;
+            switch (wire) {
+                case 0:
+                    if (TryReadVarint(b, ref off, out var v)) {
+                        Add(fields, field, v);
+                    }
+                    break;
+                case 1:
+                    if (off + 8 > b.Length) return fields;
+                    Add(fields, field, BitConverter.ToUInt64(b.Slice(off, 8)));
+                    off += 8;
+                    break;
+                case 2:
+                    if (!TryReadVarint(b, ref off, out var len) || len > 16 * 1024 * 1024 || off + (int) len > b.Length) {
+                        return fields;
+                    }
+                    Add(fields, field, new LD(b.Slice(off, (int) len).ToArray()));
+                    off += (int) len;
+                    break;
+                case 5:
+                    if (off + 4 > b.Length) return fields;
+                    Add(fields, field, BitConverter.ToUInt32(b.Slice(off, 4)));
+                    off += 4;
+                    break;
+                default:
+                    return fields;
+            }
+        }
+        return fields;
+    }
+
+    private static void Add(Dictionary<int, List<object>> fields, int field, object value) {
+        if (!fields.TryGetValue(field, out var list)) {
+            list = [];
+            fields[field] = list;
+        }
+        list.Add(value);
+    }
+
+    public static ulong? GetFirstVarint(this Dictionary<int, List<object>> fields, int field) {
+        if (!fields.TryGetValue(field, out var list)) return null;
+        foreach (var v in list) {
+            if (v is ulong u) return u;
+        }
+        return null;
+    }
+
+    /// <summary>取 repeated uint32 字段, 兼容 packed(字节块内 varint) 与 unpacked(逐个 varint)。</summary>
+    public static List<ulong> GetPackedList(this Dictionary<int, List<object>> fields, int field) {
+        var outList = new List<ulong>();
+        if (!fields.TryGetValue(field, out var list)) return outList;
+        foreach (var v in list) {
+            switch (v) {
+                case ulong u:
+                    outList.Add(u);
+                    break;
+                case LD ld:
+                    var off = 0;
+                    while (off < ld.Data.Length && TryReadVarint(ld.Data.AsSpan(), ref off, out var n)) {
+                        outList.Add(n);
+                    }
+                    break;
+            }
+        }
+        return outList;
+    }
+
+    private static bool TryReadVarint(ReadOnlySpan<byte> b, ref int off, out ulong value) {
+        value = 0;
+        var shift = 0;
+        while (off < b.Length && shift < 64) {
+            var x = b[off++];
+            value |= (ulong) (x & 0x7F) << shift;
+            if (x < 0x80) return true;
+            shift += 7;
+        }
+        return false;
+    }
 }
 
 internal static class ProtoWalkerExt {

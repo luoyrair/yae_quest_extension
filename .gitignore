@@ -3,6 +3,8 @@
 
 # Yae 工作克隆与构建产物
 Yae/
+build/
+build_verify/
 publish_quest/
 publish_lib/
 

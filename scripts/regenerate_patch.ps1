@@ -33,7 +33,6 @@ try {
 
     # 2) 新文件 = 未跟踪的 Parsers 新增文件
     $newFiles = @(
-        "YaeAchievement\src\Parsers\PacketCapture.cs",
         "YaeAchievement\src\Parsers\FullSyncExporter.cs"
     )
     foreach ($rel in $newFiles) {

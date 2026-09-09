@@ -17,7 +17,7 @@
 
    该脚本会：
    - 用 `git diff` 重新生成 `patch/yae_quest_ext.patch`（`cmd /c` 原生重定向，保留 UTF-8 字节，无 BOM）
-   - 重新复制新文件 `files/YaeAchievement/src/Parsers/{PacketCapture.cs, FullSyncExporter.cs}`
+   - 重新复制新文件 `files/YaeAchievement/src/Parsers/FullSyncExporter.cs`
 3. 验证补丁仍可应用 + 构建：
 
    ```powershell

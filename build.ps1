@@ -105,7 +105,6 @@ try {
     git apply "$root\patch\yae_quest_ext.patch"
     if ($LASTEXITCODE -ne 0) { throw "补丁应用失败 — 可能 Yae 上游已更新, 需重新生成补丁" }
     Write-Host "[build] 复制新文件..."
-    Copy-Item "$root\files\YaeAchievement\src\Parsers\PacketCapture.cs" "YaeAchievement\src\Parsers\" -Force
     Copy-Item "$root\files\YaeAchievement\src\Parsers\FullSyncExporter.cs" "YaeAchievement\src\Parsers\" -Force
 } finally {
     Pop-Location
